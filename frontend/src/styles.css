@@ -113,6 +113,30 @@ button.warn { background: #ffe9c5; border-color: #ffcf80; color: #8a5a00; }
 button.danger { background: #ffd7d7; border-color: #ffaaaa; color: #8b1f1f; }
 
 .actions { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+.ticket-title-btn {
+  border: none;
+  background: transparent;
+  color: #2453a6;
+  text-decoration: underline;
+  padding: 0;
+  cursor: pointer;
+  font-weight: 600;
+}
+.ticket-title-btn:hover { color: #183f84; }
+.ticket-editor {
+  margin-top: 12px;
+  border: 1px solid #ccd8ea;
+  border-radius: 10px;
+  padding: 12px;
+  background: #f9fbff;
+}
+.followup-editor {
+  display: flex;
+  gap: 8px;
+}
+.followup-editor input {
+  flex: 1;
+}
 .checkbox-row {
   display: flex;
   align-items: center;

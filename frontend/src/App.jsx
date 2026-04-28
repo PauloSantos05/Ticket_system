@@ -119,6 +119,8 @@ export default function App() {
   const [followUpInput, setFollowUpInput] = useState({});
   const [followUpItems, setFollowUpItems] = useState({});
   const [filters, setFilters] = useState({});
+  const [activeTicket, setActiveTicket] = useState(null);
+  const [ticketEditorForm, setTicketEditorForm] = useState(null);
 
   const [loginForm, setLoginForm] = useState({ email: "", password: "" });
   const [employeeForm, setEmployeeForm] = useState({ username: "", email: "", password: "", role: roles[0], jobTitle: "", employmentStatus: "active" });
@@ -205,9 +207,10 @@ export default function App() {
   }
 
   async function updateTicket(id, payload) {
-    await api(`/tickets/${id}`, "PUT", token, payload);
+    const updated = await api(`/tickets/${id}`, "PUT", token, payload);
     refreshQueues();
     if (isSearchMode) refreshSearch();
+    return updated;
   }
 
   async function addFollowUp(ticketId) {
@@ -231,6 +234,33 @@ export default function App() {
     setSelectedIds([]);
     refreshQueues();
     if (isSearchMode) refreshSearch();
+  }
+
+  function openTicketEditor(ticket) {
+    setActiveTicket(ticket);
+    setTicketEditorForm({
+      title: ticket.title,
+      description: ticket.description,
+      priority: ticket.priority,
+      status: ticket.status,
+      roleGroup: ticket.role_group,
+      appliedByEmployeeId: ticket.applied_by_employee_id ?? ""
+    });
+    loadFollowUp(ticket.id);
+  }
+
+  async function saveTicketEditor(e) {
+    e.preventDefault();
+    if (!activeTicket || !ticketEditorForm) return;
+    const updated = await updateTicket(activeTicket.id, {
+      title: ticketEditorForm.title,
+      description: ticketEditorForm.description,
+      priority: ticketEditorForm.priority,
+      status: ticketEditorForm.status,
+      roleGroup: ticketEditorForm.roleGroup,
+      appliedByEmployeeId: ticketEditorForm.appliedByEmployeeId ? Number(ticketEditorForm.appliedByEmployeeId) : null
+    });
+    setActiveTicket(updated);
   }
 
   if (!token) {
@@ -387,7 +417,77 @@ export default function App() {
             )}
 
             <h4>{isSearchMode ? "Fila de Busca de Chamados" : t.mainQueue}</h4>
-            <TicketTable data={isSearchMode ? searchTickets : mainTickets} selectedIds={selectedIds} setSelectedIds={setSelectedIds} canSelect={user.role === "Owner"} onStatusChange={updateTicket} loadFollowUp={loadFollowUp} followUpItems={followUpItems} followUpInput={followUpInput} setFollowUpInput={setFollowUpInput} addFollowUp={addFollowUp} />
+            <TicketTable
+              data={isSearchMode ? searchTickets : mainTickets}
+              selectedIds={selectedIds}
+              setSelectedIds={setSelectedIds}
+              canSelect={user.role === "Owner"}
+              onStatusChange={updateTicket}
+              loadFollowUp={loadFollowUp}
+              followUpItems={followUpItems}
+              followUpInput={followUpInput}
+              setFollowUpInput={setFollowUpInput}
+              addFollowUp={addFollowUp}
+              readOnlyStatus
+              hideFollowUp
+              onTitleClick={openTicketEditor}
+            />
+
+            {activeTicket && ticketEditorForm && (
+              <div className="ticket-editor">
+                <div className="section-head">
+                  <h4>Aba do Chamado #{activeTicket.id}</h4>
+                  <button onClick={() => setActiveTicket(null)}>Fechar</button>
+                </div>
+                <form className="form-grid" onSubmit={saveTicketEditor}>
+                  <input
+                    placeholder="Title"
+                    value={ticketEditorForm.title}
+                    onChange={(e) => setTicketEditorForm((f) => ({ ...f, title: e.target.value }))}
+                  />
+                  <input
+                    placeholder="Description"
+                    value={ticketEditorForm.description}
+                    onChange={(e) => setTicketEditorForm((f) => ({ ...f, description: e.target.value }))}
+                  />
+                  <select value={ticketEditorForm.priority} onChange={(e) => setTicketEditorForm((f) => ({ ...f, priority: e.target.value }))}>
+                    {priorities.map((p) => <option key={p}>{p}</option>)}
+                  </select>
+                  <select value={ticketEditorForm.status} onChange={(e) => setTicketEditorForm((f) => ({ ...f, status: e.target.value }))}>
+                    {statuses.map((s) => <option key={s}>{s}</option>)}
+                  </select>
+                  <select value={ticketEditorForm.roleGroup} onChange={(e) => setTicketEditorForm((f) => ({ ...f, roleGroup: e.target.value }))}>
+                    {roles.map((r) => <option key={r}>{r}</option>)}
+                  </select>
+                  <select
+                    value={ticketEditorForm.appliedByEmployeeId}
+                    onChange={(e) => setTicketEditorForm((f) => ({ ...f, appliedByEmployeeId: e.target.value }))}
+                  >
+                    <option value="">No one</option>
+                    {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.username}</option>)}
+                  </select>
+                  <button className="primary">Salvar alterações</button>
+                </form>
+
+                <h4>{t.followUp}</h4>
+                <div className="followup-list">
+                  {(followUpItems[activeTicket.id] || []).map((item) => (
+                    <div key={item.id} className="followup-item">
+                      <strong>{item.username}</strong> ({item.email} | {item.role})<br />
+                      {item.message}
+                    </div>
+                  ))}
+                </div>
+                <div className="followup-editor">
+                  <input
+                    placeholder="Mensagem de follow-up"
+                    value={followUpInput[activeTicket.id] || ""}
+                    onChange={(e) => setFollowUpInput((f) => ({ ...f, [activeTicket.id]: e.target.value }))}
+                  />
+                  <button className="primary" onClick={() => addFollowUp(activeTicket.id)}>Enviar</button>
+                </div>
+              </div>
+            )}
           </section>
         )}
 
@@ -421,7 +521,7 @@ export default function App() {
             </form>
 
             <h4>{t.homeQueue}</h4>
-            <TicketTable data={myQueue} selectedIds={selectedIds} setSelectedIds={setSelectedIds} canSelect={user.role === "Owner"} onStatusChange={updateTicket} loadFollowUp={loadFollowUp} followUpItems={followUpItems} followUpInput={followUpInput} setFollowUpInput={setFollowUpInput} addFollowUp={addFollowUp} />
+            <TicketTable data={myQueue} selectedIds={selectedIds} setSelectedIds={setSelectedIds} canSelect={user.role === "Owner"} onStatusChange={updateTicket} loadFollowUp={loadFollowUp} followUpItems={followUpItems} followUpInput={followUpInput} setFollowUpInput={setFollowUpInput} addFollowUp={addFollowUp} onTitleClick={openTicketEditor} />
           </section>
         )}
       </main>
@@ -429,14 +529,28 @@ export default function App() {
   );
 }
 
-function TicketTable({ data, selectedIds, setSelectedIds, canSelect, onStatusChange, loadFollowUp, followUpItems, followUpInput, setFollowUpInput, addFollowUp }) {
+function TicketTable({
+  data,
+  selectedIds,
+  setSelectedIds,
+  canSelect,
+  onStatusChange,
+  loadFollowUp,
+  followUpItems,
+  followUpInput,
+  setFollowUpInput,
+  addFollowUp,
+  readOnlyStatus = false,
+  hideFollowUp = false,
+  onTitleClick
+}) {
   return (
     <div className="table-wrap">
       <table>
         <thead>
           <tr>
             {canSelect && <th>Sel</th>}
-            <th>ID</th><th>Title</th><th>Description</th><th>Created</th><th>Priority</th><th>Updated</th><th>Role</th><th>Applied by</th><th>Status</th><th>Follow-up</th>
+            <th>ID</th><th>Title</th><th>Created</th><th>Priority</th><th>Updated</th><th>Role</th><th>Applied by</th><th>Status</th>{!hideFollowUp && <th>Follow-up</th>}
           </tr>
         </thead>
         <tbody>
@@ -452,36 +566,45 @@ function TicketTable({ data, selectedIds, setSelectedIds, canSelect, onStatusCha
                 </td>
               )}
               <td>{tk.id}</td>
-              <td>{tk.title}</td>
-              <td>{tk.description}</td>
+              <td>
+                <button className="ticket-title-btn" title={tk.description} onClick={() => onTitleClick?.(tk)}>
+                  {tk.title}
+                </button>
+              </td>
               <td>{new Date(tk.created_at).toLocaleString()}</td>
               <td><Badge value={tk.priority} colorMap={priorityColor} /></td>
               <td>{new Date(tk.updated_at).toLocaleString()}</td>
               <td>{tk.role_group}</td>
               <td>{tk.applied_by_username || "-"}</td>
               <td>
-                <select value={tk.status} onChange={(e) => onStatusChange(tk.id, { status: e.target.value })}>
-                  {statuses.map((s) => <option key={s}>{s}</option>)}
-                </select>
-                <Badge value={tk.status} colorMap={statusColor} />
+                {!readOnlyStatus ? (
+                  <select value={tk.status} onChange={(e) => onStatusChange(tk.id, { status: e.target.value })}>
+                    {statuses.map((s) => <option key={s}>{s}</option>)}
+                  </select>
+                ) : (
+                  <Badge value={tk.status} colorMap={statusColor} />
+                )}
+                {!readOnlyStatus && <Badge value={tk.status} colorMap={statusColor} />}
               </td>
-              <td>
-                <button onClick={() => loadFollowUp(tk.id)}>Ver</button>
-                <div className="followup-list">
-                  {(followUpItems[tk.id] || []).map((item) => (
-                    <div key={item.id} className="followup-item">
-                      <strong>{item.username}</strong> ({item.email} | {item.role})<br />
-                      {item.message}
-                    </div>
-                  ))}
-                </div>
-                <input
-                  placeholder="Mensagem"
-                  value={followUpInput[tk.id] || ""}
-                  onChange={(e) => setFollowUpInput((f) => ({ ...f, [tk.id]: e.target.value }))}
-                />
-                <button className="primary" onClick={() => addFollowUp(tk.id)}>Enviar</button>
-              </td>
+              {!hideFollowUp && (
+                <td>
+                  <button onClick={() => loadFollowUp(tk.id)}>Ver</button>
+                  <div className="followup-list">
+                    {(followUpItems[tk.id] || []).map((item) => (
+                      <div key={item.id} className="followup-item">
+                        <strong>{item.username}</strong> ({item.email} | {item.role})<br />
+                        {item.message}
+                      </div>
+                    ))}
+                  </div>
+                  <input
+                    placeholder="Mensagem"
+                    value={followUpInput[tk.id] || ""}
+                    onChange={(e) => setFollowUpInput((f) => ({ ...f, [tk.id]: e.target.value }))}
+                  />
+                  <button className="primary" onClick={() => addFollowUp(tk.id)}>Enviar</button>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
