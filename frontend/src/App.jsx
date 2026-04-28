@@ -1,0 +1,490 @@
+import { useEffect, useMemo, useState } from "react";
+
+const API_URL = "http://localhost:4000/api";
+const roles = ["Technical Support", "Network", "HR", "System Analysis", "Administration"];
+const priorities = ["too High", "High", "Normal", "low", "too low"];
+const statuses = ["Opened", "Follow up", "Finished"];
+
+const priorityColor = {
+  "too High": "#d62828",
+  High: "#ff8800",
+  Normal: "#2a9d8f",
+  low: "#f4d35e",
+  "too low": "#3a86ff"
+};
+
+const statusColor = {
+  Finished: "#111111",
+  Opened: "#2dc653",
+  "Follow up": "#f4d35e"
+};
+
+const i18n = {
+  pt: {
+    app: "ByteSolutions Ticket Management",
+    login: "Entrar",
+    email: "Email",
+    password: "Senha",
+    ownerAdmin: "Admin (Owner)",
+    tickets: "Tickets",
+    dashboard: "Dashboard",
+    employees: "Funcionários",
+    homeQueue: "Minha Fila",
+    mainQueue: "Fila Principal",
+    myDesk: "Minha Área",
+    createTicket: "Criar Ticket",
+    save: "Salvar",
+    followUp: "Follow-up",
+    logout: "Sair",
+    deleteSelected: "Deletar Selecionados",
+    deleteAll: "Deletar Todos",
+    confirmDelete: "Tem certeza que deseja deletar o(s) ticket(s)?"
+  },
+  en: {
+    app: "ByteSolutions Ticket Management",
+    login: "Login",
+    email: "Email",
+    password: "Password",
+    ownerAdmin: "Owner Admin",
+    tickets: "Tickets",
+    dashboard: "Dashboard",
+    employees: "Employees",
+    homeQueue: "My Queue",
+    mainQueue: "Main Queue",
+    myDesk: "My Desk",
+    createTicket: "Create Ticket",
+    save: "Save",
+    followUp: "Follow-up",
+    logout: "Logout",
+    deleteSelected: "Delete Selected",
+    deleteAll: "Delete All",
+    confirmDelete: "Are you sure you want to delete ticket(s)?"
+  },
+  es: {
+    app: "Gestión de Tickets ByteSolutions",
+    login: "Iniciar sesión",
+    email: "Email",
+    password: "Contraseña",
+    ownerAdmin: "Admin Owner",
+    tickets: "Tickets",
+    dashboard: "Panel",
+    employees: "Empleados",
+    homeQueue: "Mi Cola",
+    mainQueue: "Cola Principal",
+    myDesk: "Mi Área",
+    createTicket: "Crear Ticket",
+    save: "Guardar",
+    followUp: "Seguimiento",
+    logout: "Salir",
+    deleteSelected: "Eliminar Seleccionados",
+    deleteAll: "Eliminar Todos",
+    confirmDelete: "¿Seguro que deseas eliminar los ticket(s)?"
+  }
+};
+
+async function api(path, method = "GET", token, body) {
+  const res = await fetch(`${API_URL}${path}`, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: "Erro na API" }));
+    throw new Error(err.error || "Erro na API");
+  }
+  return res.json();
+}
+
+function Badge({ value, colorMap }) {
+  return <span className="badge" style={{ backgroundColor: colorMap[value] || "#ccc" }}>{value}</span>;
+}
+
+export default function App() {
+  const [lang, setLang] = useState("pt");
+  const t = i18n[lang];
+  const [token, setToken] = useState("");
+  const [user, setUser] = useState(null);
+  const [view, setView] = useState("tickets");
+  const [period, setPeriod] = useState("month");
+  const [mainTickets, setMainTickets] = useState([]);
+  const [myTickets, setMyTickets] = useState([]);
+  const [searchTickets, setSearchTickets] = useState([]);
+  const [isSearchMode, setIsSearchMode] = useState(false);
+  const [employees, setEmployees] = useState([]);
+  const [metrics, setMetrics] = useState([]);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [followUpInput, setFollowUpInput] = useState({});
+  const [followUpItems, setFollowUpItems] = useState({});
+  const [filters, setFilters] = useState({});
+
+  const [loginForm, setLoginForm] = useState({ email: "", password: "" });
+  const [employeeForm, setEmployeeForm] = useState({ username: "", email: "", password: "", role: roles[0], jobTitle: "", employmentStatus: "active" });
+  const [ticketForm, setTicketForm] = useState({ title: "", description: "", priority: priorities[2], roleGroup: roles[0], status: statuses[0], appliedByEmployeeId: "", assignToMe: false });
+
+  async function fetchTickets(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    const data = await api(`/tickets${query ? `?${query}` : ""}`, "GET", token);
+    return data;
+  }
+
+  async function refreshQueues() {
+    const [mainData, myData] = await Promise.all([
+      fetchTickets({ scope: "all" }),
+      fetchTickets({ scope: "mine" })
+    ]);
+    setMainTickets(mainData);
+    setMyTickets(myData);
+  }
+
+  async function refreshSearch() {
+    const data = await fetchTickets({ ...filters, scope: "all" });
+    setSearchTickets(data);
+  }
+
+  async function refreshEmployees() {
+    if (user?.role !== "Owner") return;
+    const data = await api("/employees", "GET", token);
+    setEmployees(data);
+  }
+
+  async function refreshDashboard() {
+    if (user?.role !== "Owner") return;
+    const data = await api(`/dashboard/employee-metrics?period=${period}`, "GET", token);
+    setMetrics(data);
+  }
+
+  useEffect(() => {
+    if (!token) return;
+    refreshQueues().catch(() => {});
+  }, [token]);
+
+  useEffect(() => {
+    if (!token || !isSearchMode) return;
+    refreshSearch().catch(() => {});
+  }, [token, filters, isSearchMode]);
+
+  useEffect(() => {
+    if (!token) return;
+    refreshEmployees().catch(() => {});
+    refreshDashboard().catch(() => {});
+  }, [token, period, user?.role]);
+
+  const myQueue = useMemo(() => myTickets.filter((tk) => tk.applied_by_employee_id === user?.id), [myTickets, user]);
+
+  async function onLogin(e) {
+    e.preventDefault();
+    const data = await api("/auth/login", "POST", null, loginForm);
+    setToken(data.token);
+    setUser(data.user);
+  }
+
+  async function onCreateEmployee(e) {
+    e.preventDefault();
+    await api("/employees", "POST", token, employeeForm);
+    setEmployeeForm({ username: "", email: "", password: "", role: roles[0], jobTitle: "", employmentStatus: "active" });
+    refreshEmployees();
+  }
+
+  async function onCreateTicket(e) {
+    e.preventDefault();
+    const appliedByEmployeeId = ticketForm.assignToMe
+      ? user.id
+      : ticketForm.appliedByEmployeeId
+        ? Number(ticketForm.appliedByEmployeeId)
+        : null;
+    await api("/tickets", "POST", token, {
+      ...ticketForm,
+      appliedByEmployeeId
+    });
+    setTicketForm({ title: "", description: "", priority: priorities[2], roleGroup: roles[0], status: statuses[0], appliedByEmployeeId: "", assignToMe: false });
+    refreshQueues();
+    if (isSearchMode) refreshSearch();
+  }
+
+  async function updateTicket(id, payload) {
+    await api(`/tickets/${id}`, "PUT", token, payload);
+    refreshQueues();
+    if (isSearchMode) refreshSearch();
+  }
+
+  async function addFollowUp(ticketId) {
+    const message = followUpInput[ticketId];
+    if (!message) return;
+    await api(`/tickets/${ticketId}/follow-up`, "POST", token, { message });
+    const data = await api(`/tickets/${ticketId}/follow-up`, "GET", token);
+    setFollowUpItems((prev) => ({ ...prev, [ticketId]: data }));
+    setFollowUpInput((prev) => ({ ...prev, [ticketId]: "" }));
+    updateTicket(ticketId, { status: "Follow up" });
+  }
+
+  async function loadFollowUp(ticketId) {
+    const data = await api(`/tickets/${ticketId}/follow-up`, "GET", token);
+    setFollowUpItems((prev) => ({ ...prev, [ticketId]: data }));
+  }
+
+  async function deleteTickets(mode) {
+    if (!window.confirm(t.confirmDelete)) return;
+    await api("/tickets/bulk-delete", "POST", token, mode === "all" ? { mode: "all" } : { mode: "selected", ids: selectedIds });
+    setSelectedIds([]);
+    refreshQueues();
+    if (isSearchMode) refreshSearch();
+  }
+
+  if (!token) {
+    return (
+      <div className="auth-shell">
+        <div className="auth-panel">
+          <p className="brand-kicker">ByteSolutions</p>
+          <h1>{t.app}</h1>
+          <p className="muted">Plataforma interna de chamados, filas e acompanhamento técnico.</p>
+          <div className="lang-row">
+            <button className={lang === "pt" ? "active" : ""} onClick={() => setLang("pt")}>PT</button>
+            <button className={lang === "en" ? "active" : ""} onClick={() => setLang("en")}>EN</button>
+            <button className={lang === "es" ? "active" : ""} onClick={() => setLang("es")}>ES</button>
+          </div>
+          <form onSubmit={onLogin} className="form-grid auth-form">
+            <input placeholder={t.email} value={loginForm.email} onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })} />
+            <input type="password" placeholder={t.password} value={loginForm.password} onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })} />
+            <button type="submit" className="primary">{t.login}</button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="sidebar-brand">
+          <p>ByteSolutions</p>
+          <strong>Service Desk</strong>
+        </div>
+        <nav className="sidebar-nav">
+          <button className={view === "tickets" ? "active" : ""} onClick={() => setView("tickets")}>{t.tickets}</button>
+          {user.role === "Owner" && <button className={view === "admin" ? "active" : ""} onClick={() => setView("admin")}>{t.ownerAdmin}</button>}
+          {user.role === "Owner" && <button className={view === "dashboard" ? "active" : ""} onClick={() => setView("dashboard")}>{t.dashboard}</button>}
+        </nav>
+        <div className="sidebar-footer">
+          <p>{user.username}</p>
+          <span>{user.role}</span>
+          <button onClick={() => { setToken(""); setUser(null); }}>{t.logout}</button>
+        </div>
+      </aside>
+
+      <main className="main-content">
+        <header className="topbar">
+          <div>
+            <h2>{t.app}</h2>
+            <p className="muted">Painel operacional inspirado em service desk corporativo.</p>
+          </div>
+          <div className="stats-row">
+            <div className="stat-card"><span>Total</span><strong>{mainTickets.length}</strong></div>
+            <div className="stat-card"><span>Minha fila</span><strong>{myQueue.length}</strong></div>
+            <div className="stat-card"><span>Abertos</span><strong>{mainTickets.filter((tk) => tk.status === "Opened").length}</strong></div>
+          </div>
+        </header>
+
+        {view === "admin" && user.role === "Owner" && (
+          <section className="card section-card">
+            <h3>{t.employees}</h3>
+            <form className="form-grid" onSubmit={onCreateEmployee}>
+              <input placeholder="Username" value={employeeForm.username} onChange={(e) => setEmployeeForm({ ...employeeForm, username: e.target.value })} />
+              <input placeholder={t.email} value={employeeForm.email} onChange={(e) => setEmployeeForm({ ...employeeForm, email: e.target.value })} />
+              <input type="password" placeholder={t.password} value={employeeForm.password} onChange={(e) => setEmployeeForm({ ...employeeForm, password: e.target.value })} />
+              <select value={employeeForm.role} onChange={(e) => setEmployeeForm({ ...employeeForm, role: e.target.value })}>{roles.map((r) => <option key={r}>{r}</option>)}</select>
+              <input placeholder="Job title" value={employeeForm.jobTitle} onChange={(e) => setEmployeeForm({ ...employeeForm, jobTitle: e.target.value })} />
+              <select value={employeeForm.employmentStatus} onChange={(e) => setEmployeeForm({ ...employeeForm, employmentStatus: e.target.value })}>
+                <option value="active">active</option>
+                <option value="deactivated">deactivated</option>
+              </select>
+              <button className="primary">{t.save}</button>
+            </form>
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>ID</th><th>Username</th><th>Email</th><th>Role</th><th>Job</th><th>Status</th></tr></thead>
+                <tbody>{employees.map((e) => <tr key={e.id}><td>{e.id}</td><td>{e.username}</td><td>{e.email}</td><td>{e.role}</td><td>{e.job_title}</td><td>{e.employment_status}</td></tr>)}</tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
+        {view === "dashboard" && user.role === "Owner" && (
+          <section className="card section-card">
+            <div className="section-head">
+              <h3>{t.dashboard}</h3>
+              <select value={period} onChange={(e) => setPeriod(e.target.value)}>
+                <option value="today">today</option>
+                <option value="week">week</option>
+                <option value="month">month</option>
+              </select>
+            </div>
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>Employee</th><th>Email</th><th>Role</th><th>Status</th><th>Closed</th><th>Assigned</th><th>In progress</th></tr></thead>
+                <tbody>{metrics.map((m) => <tr key={m.id}><td>{m.username}</td><td>{m.email}</td><td>{m.role}</td><td>{m.employment_status}</td><td>{m.closed_tickets}</td><td>{m.assigned_tickets}</td><td>{m.in_progress_tickets}</td></tr>)}</tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
+        {view === "tickets" && (
+          <section className="card section-card">
+            <div className="section-head">
+              <h3>{t.createTicket}</h3>
+              <div className="actions">
+                <button onClick={() => setView("myDesk")}>{t.myDesk}</button>
+                <button title="Busca avançada" onClick={() => setIsSearchMode((s) => !s)}>🔎</button>
+              </div>
+            </div>
+            <form className="form-grid" onSubmit={onCreateTicket}>
+              <input placeholder="Title" value={ticketForm.title} onChange={(e) => setTicketForm({ ...ticketForm, title: e.target.value })} />
+              <input placeholder="Description" value={ticketForm.description} onChange={(e) => setTicketForm({ ...ticketForm, description: e.target.value })} />
+              <select value={ticketForm.priority} onChange={(e) => setTicketForm({ ...ticketForm, priority: e.target.value })}>{priorities.map((p) => <option key={p}>{p}</option>)}</select>
+              <select value={ticketForm.status} onChange={(e) => setTicketForm({ ...ticketForm, status: e.target.value })}>{statuses.map((s) => <option key={s}>{s}</option>)}</select>
+              <select value={ticketForm.roleGroup} onChange={(e) => setTicketForm({ ...ticketForm, roleGroup: e.target.value })}>{roles.map((r) => <option key={r}>{r}</option>)}</select>
+              {user.role === "Owner" ? (
+                <select value={ticketForm.appliedByEmployeeId} onChange={(e) => setTicketForm({ ...ticketForm, appliedByEmployeeId: e.target.value })}>
+                  <option value="">No one</option>
+                  {employees.map((e) => <option key={e.id} value={e.id}>{e.username}</option>)}
+                </select>
+              ) : (
+                <label className="checkbox-row">
+                  <input type="checkbox" checked={ticketForm.assignToMe} onChange={(e) => setTicketForm({ ...ticketForm, assignToMe: e.target.checked })} />
+                  Atribuir para mim ao criar
+                </label>
+              )}
+              <button className="primary">{t.save}</button>
+            </form>
+
+            {isSearchMode && (
+              <>
+                <div className="section-head">
+                  <h4>Busca Avançada</h4>
+                  <button onClick={() => setIsSearchMode(false)}>Voltar para fila principal</button>
+                </div>
+                <div className="form-grid">
+                  <input placeholder="ID" onChange={(e) => setFilters((f) => ({ ...f, id: e.target.value }))} />
+                  <input placeholder="Title" onChange={(e) => setFilters((f) => ({ ...f, title: e.target.value }))} />
+                  <input placeholder="Description" onChange={(e) => setFilters((f) => ({ ...f, description: e.target.value }))} />
+                  <input type="date" onChange={(e) => setFilters((f) => ({ ...f, createdAt: e.target.value }))} />
+                  <select onChange={(e) => setFilters((f) => ({ ...f, priority: e.target.value }))}><option value="">Priority</option>{priorities.map((p) => <option key={p}>{p}</option>)}</select>
+                  <input type="date" onChange={(e) => setFilters((f) => ({ ...f, updatedAt: e.target.value }))} />
+                  <select onChange={(e) => setFilters((f) => ({ ...f, roleGroup: e.target.value }))}><option value="">Role Group</option>{roles.map((r) => <option key={r}>{r}</option>)}</select>
+                  <input placeholder="Applied by" onChange={(e) => setFilters((f) => ({ ...f, appliedBy: e.target.value }))} />
+                  <select onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}><option value="">Status</option>{statuses.map((s) => <option key={s}>{s}</option>)}</select>
+                </div>
+              </>
+            )}
+
+            {user.role === "Owner" && (
+              <div className="actions">
+                <button className="warn" onClick={() => deleteTickets("selected")} disabled={!selectedIds.length}>{t.deleteSelected}</button>
+                <button className="danger" onClick={() => deleteTickets("all")}>{t.deleteAll}</button>
+              </div>
+            )}
+
+            <h4>{isSearchMode ? "Fila de Busca de Chamados" : t.mainQueue}</h4>
+            <TicketTable data={isSearchMode ? searchTickets : mainTickets} selectedIds={selectedIds} setSelectedIds={setSelectedIds} canSelect={user.role === "Owner"} onStatusChange={updateTicket} loadFollowUp={loadFollowUp} followUpItems={followUpItems} followUpInput={followUpInput} setFollowUpInput={setFollowUpInput} addFollowUp={addFollowUp} />
+          </section>
+        )}
+
+        {view === "myDesk" && (
+          <section className="card section-card">
+            <div className="section-head">
+              <h3>{t.myDesk}</h3>
+              <button onClick={() => setView("tickets")}>Voltar para {t.mainQueue}</button>
+            </div>
+            <p className="muted">Aqui ficam apenas os chamados atribuídos para você.</p>
+
+            <h4>{t.createTicket}</h4>
+            <form className="form-grid" onSubmit={onCreateTicket}>
+              <input placeholder="Title" value={ticketForm.title} onChange={(e) => setTicketForm({ ...ticketForm, title: e.target.value })} />
+              <input placeholder="Description" value={ticketForm.description} onChange={(e) => setTicketForm({ ...ticketForm, description: e.target.value })} />
+              <select value={ticketForm.priority} onChange={(e) => setTicketForm({ ...ticketForm, priority: e.target.value })}>{priorities.map((p) => <option key={p}>{p}</option>)}</select>
+              <select value={ticketForm.status} onChange={(e) => setTicketForm({ ...ticketForm, status: e.target.value })}>{statuses.map((s) => <option key={s}>{s}</option>)}</select>
+              <select value={ticketForm.roleGroup} onChange={(e) => setTicketForm({ ...ticketForm, roleGroup: e.target.value })}>{roles.map((r) => <option key={r}>{r}</option>)}</select>
+              {user.role === "Owner" ? (
+                <select value={ticketForm.appliedByEmployeeId} onChange={(e) => setTicketForm({ ...ticketForm, appliedByEmployeeId: e.target.value })}>
+                  <option value="">No one</option>
+                  {employees.map((e) => <option key={e.id} value={e.id}>{e.username}</option>)}
+                </select>
+              ) : (
+                <label className="checkbox-row">
+                  <input type="checkbox" checked={ticketForm.assignToMe} onChange={(e) => setTicketForm({ ...ticketForm, assignToMe: e.target.checked })} />
+                  Atribuir para mim ao criar
+                </label>
+              )}
+              <button className="primary">{t.save}</button>
+            </form>
+
+            <h4>{t.homeQueue}</h4>
+            <TicketTable data={myQueue} selectedIds={selectedIds} setSelectedIds={setSelectedIds} canSelect={user.role === "Owner"} onStatusChange={updateTicket} loadFollowUp={loadFollowUp} followUpItems={followUpItems} followUpInput={followUpInput} setFollowUpInput={setFollowUpInput} addFollowUp={addFollowUp} />
+          </section>
+        )}
+      </main>
+    </div>
+  );
+}
+
+function TicketTable({ data, selectedIds, setSelectedIds, canSelect, onStatusChange, loadFollowUp, followUpItems, followUpInput, setFollowUpInput, addFollowUp }) {
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            {canSelect && <th>Sel</th>}
+            <th>ID</th><th>Title</th><th>Description</th><th>Created</th><th>Priority</th><th>Updated</th><th>Role</th><th>Applied by</th><th>Status</th><th>Follow-up</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((tk) => (
+            <tr key={tk.id}>
+              {canSelect && (
+                <td>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(tk.id)}
+                    onChange={(e) => setSelectedIds((old) => (e.target.checked ? [...old, tk.id] : old.filter((id) => id !== tk.id)))}
+                  />
+                </td>
+              )}
+              <td>{tk.id}</td>
+              <td>{tk.title}</td>
+              <td>{tk.description}</td>
+              <td>{new Date(tk.created_at).toLocaleString()}</td>
+              <td><Badge value={tk.priority} colorMap={priorityColor} /></td>
+              <td>{new Date(tk.updated_at).toLocaleString()}</td>
+              <td>{tk.role_group}</td>
+              <td>{tk.applied_by_username || "-"}</td>
+              <td>
+                <select value={tk.status} onChange={(e) => onStatusChange(tk.id, { status: e.target.value })}>
+                  {statuses.map((s) => <option key={s}>{s}</option>)}
+                </select>
+                <Badge value={tk.status} colorMap={statusColor} />
+              </td>
+              <td>
+                <button onClick={() => loadFollowUp(tk.id)}>Ver</button>
+                <div className="followup-list">
+                  {(followUpItems[tk.id] || []).map((item) => (
+                    <div key={item.id} className="followup-item">
+                      <strong>{item.username}</strong> ({item.email} | {item.role})<br />
+                      {item.message}
+                    </div>
+                  ))}
+                </div>
+                <input
+                  placeholder="Mensagem"
+                  value={followUpInput[tk.id] || ""}
+                  onChange={(e) => setFollowUpInput((f) => ({ ...f, [tk.id]: e.target.value }))}
+                />
+                <button className="primary" onClick={() => addFollowUp(tk.id)}>Enviar</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
