@@ -6,6 +6,25 @@ const router = express.Router();
 
 router.use(requireAuth);
 
+function canEditTicket(user, ticket) {
+  if (user.role === "Owner") return true;
+  return (
+    ticket.applied_by_employee_id === user.id ||
+    ticket.requester_employee_id === user.id ||
+    ticket.created_by_employee_id === user.id
+  );
+}
+
+router.get("/meta/requesters", async (_req, res) => {
+  const result = await query(
+    `SELECT id, username, email, role
+     FROM employees
+     WHERE employment_status = 'active'
+     ORDER BY username ASC`
+  );
+  res.json(result.rows);
+});
+
 router.get("/", async (req, res) => {
   const {
     id,
@@ -15,6 +34,8 @@ router.get("/", async (req, res) => {
     priority,
     updatedAt,
     roleGroup,
+    requester,
+    requesterGroup,
     appliedBy,
     status,
     scope = "all",
@@ -54,6 +75,14 @@ router.get("/", async (req, res) => {
     conditions.push(`t.role_group = $${index++}`);
     values.push(roleGroup);
   }
+  if (requester) {
+    conditions.push(`r.username ILIKE $${index++}`);
+    values.push(`%${requester}%`);
+  }
+  if (requesterGroup) {
+    conditions.push(`t.requester_group = $${index++}`);
+    values.push(requesterGroup);
+  }
   if (appliedBy) {
     conditions.push(`e.username ILIKE $${index++}`);
     values.push(`%${appliedBy}%`);
@@ -74,9 +103,12 @@ router.get("/", async (req, res) => {
   const finalSortOrder = String(sortOrder).toLowerCase() === "asc" ? "ASC" : "DESC";
 
   const result = await query(
-    `SELECT t.*, e.username as applied_by_username, e.email as applied_by_email, e.role as applied_by_role, e.job_title as applied_by_job_title, e.employment_status as applied_by_employment_status
+    `SELECT t.*,
+      e.username as applied_by_username, e.email as applied_by_email, e.role as applied_by_role, e.job_title as applied_by_job_title, e.employment_status as applied_by_employment_status,
+      r.username as requester_username, r.email as requester_email, r.role as requester_role
      FROM tickets t
      LEFT JOIN employees e ON e.id = t.applied_by_employee_id
+     LEFT JOIN employees r ON r.id = t.requester_employee_id
      ${where}
      ORDER BY t.${finalSortBy} ${finalSortOrder}`,
     values
@@ -86,16 +118,25 @@ router.get("/", async (req, res) => {
 });
 
 router.post("/", async (req, res) => {
-  const { title, description, priority, roleGroup, status = "Opened", appliedByEmployeeId = null } = req.body;
-  if (!title || !description || !priority || !roleGroup) {
-    return res.status(400).json({ error: "Campos obrigatórios: title, description, priority, roleGroup." });
+  const {
+    title,
+    description,
+    priority,
+    roleGroup,
+    requesterEmployeeId = null,
+    requesterGroup,
+    status = "Opened",
+    appliedByEmployeeId = null
+  } = req.body;
+  if (!title || !description || !priority || !roleGroup || !requesterGroup) {
+    return res.status(400).json({ error: "Campos obrigatórios: title, description, priority, roleGroup, requesterGroup." });
   }
 
   const result = await query(
-    `INSERT INTO tickets (title, description, priority, role_group, status, applied_by_employee_id, created_by_employee_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO tickets (title, description, priority, role_group, requester_employee_id, requester_group, status, applied_by_employee_id, created_by_employee_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING *`,
-    [title, description, priority, roleGroup, status, appliedByEmployeeId, req.user.id]
+    [title, description, priority, roleGroup, requesterEmployeeId, requesterGroup, status, appliedByEmployeeId, req.user.id]
   );
   res.status(201).json(result.rows[0]);
 });
@@ -106,21 +147,23 @@ router.put("/:id", async (req, res) => {
   if (!current.rowCount) return res.status(404).json({ error: "Ticket não encontrado." });
 
   const ticket = current.rows[0];
-  if (req.user.role !== "Owner" && ticket.applied_by_employee_id !== req.user.id) {
+  if (!canEditTicket(req.user, ticket)) {
     return res.status(403).json({ error: "Sem permissão para alterar este ticket." });
   }
 
-  const { title, description, priority, roleGroup, appliedByEmployeeId, status } = req.body;
+  const { title, description, priority, roleGroup, requesterEmployeeId, requesterGroup, appliedByEmployeeId, status } = req.body;
   const result = await query(
     `UPDATE tickets
-     SET title = $1, description = $2, priority = $3, role_group = $4, applied_by_employee_id = $5, status = $6, updated_at = NOW()
-     WHERE id = $7
+     SET title = $1, description = $2, priority = $3, role_group = $4, requester_employee_id = $5, requester_group = $6, applied_by_employee_id = $7, status = $8, updated_at = NOW()
+     WHERE id = $9
      RETURNING *`,
     [
       title ?? ticket.title,
       description ?? ticket.description,
       priority ?? ticket.priority,
       roleGroup ?? ticket.role_group,
+      requesterEmployeeId ?? ticket.requester_employee_id,
+      requesterGroup ?? ticket.requester_group,
       appliedByEmployeeId ?? ticket.applied_by_employee_id,
       status ?? ticket.status,
       id
@@ -136,9 +179,6 @@ router.post("/:id/follow-up", async (req, res) => {
 
   const ticket = await query("SELECT * FROM tickets WHERE id = $1", [id]);
   if (!ticket.rowCount) return res.status(404).json({ error: "Ticket não encontrado." });
-  if (req.user.role !== "Owner" && ticket.rows[0].applied_by_employee_id !== req.user.id) {
-    return res.status(403).json({ error: "Sem permissão para comentar neste ticket." });
-  }
 
   const result = await query(
     `INSERT INTO follow_ups (ticket_id, employee_id, message)

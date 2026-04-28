@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS tickets (
   updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
   priority VARCHAR(30) NOT NULL CHECK (priority IN ('too High', 'High', 'Normal', 'low', 'too low')),
   role_group VARCHAR(80) NOT NULL CHECK (role_group IN ('Technical Support', 'Network', 'HR', 'System Analysis', 'Administration')),
+  requester_employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+  requester_group VARCHAR(80) NOT NULL CHECK (requester_group IN ('Technical Support', 'Network', 'HR', 'System Analysis', 'Administration')),
   applied_by_employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL,
   created_by_employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL,
   status VARCHAR(30) NOT NULL CHECK (status IN ('Finished', 'Opened', 'Follow up'))
