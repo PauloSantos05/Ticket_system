@@ -121,10 +121,21 @@ export default function App() {
   const [filters, setFilters] = useState({});
   const [activeTicket, setActiveTicket] = useState(null);
   const [ticketEditorForm, setTicketEditorForm] = useState(null);
+  const [returnView, setReturnView] = useState("tickets");
 
   const [loginForm, setLoginForm] = useState({ email: "", password: "" });
   const [employeeForm, setEmployeeForm] = useState({ username: "", email: "", password: "", role: roles[0], jobTitle: "", employmentStatus: "active" });
-  const [ticketForm, setTicketForm] = useState({ title: "", description: "", priority: priorities[2], roleGroup: roles[0], status: statuses[0], appliedByEmployeeId: "", assignToMe: false });
+  const [ticketForm, setTicketForm] = useState({
+    title: "",
+    description: "",
+    priority: priorities[2],
+    roleGroup: roles[0],
+    requesterEmployeeId: "",
+    requesterGroup: roles[0],
+    status: statuses[0],
+    appliedByEmployeeId: "",
+    assignToMe: false
+  });
 
   async function fetchTickets(params = {}) {
     const query = new URLSearchParams(params).toString();
@@ -147,8 +158,7 @@ export default function App() {
   }
 
   async function refreshEmployees() {
-    if (user?.role !== "Owner") return;
-    const data = await api("/employees", "GET", token);
+    const data = await api("/tickets/meta/requesters", "GET", token);
     setEmployees(data);
   }
 
@@ -197,11 +207,23 @@ export default function App() {
       : ticketForm.appliedByEmployeeId
         ? Number(ticketForm.appliedByEmployeeId)
         : null;
+    const requesterEmployeeId = ticketForm.requesterEmployeeId ? Number(ticketForm.requesterEmployeeId) : null;
     await api("/tickets", "POST", token, {
       ...ticketForm,
+      requesterEmployeeId,
       appliedByEmployeeId
     });
-    setTicketForm({ title: "", description: "", priority: priorities[2], roleGroup: roles[0], status: statuses[0], appliedByEmployeeId: "", assignToMe: false });
+    setTicketForm({
+      title: "",
+      description: "",
+      priority: priorities[2],
+      roleGroup: roles[0],
+      requesterEmployeeId: "",
+      requesterGroup: roles[0],
+      status: statuses[0],
+      appliedByEmployeeId: "",
+      assignToMe: false
+    });
     refreshQueues();
     if (isSearchMode) refreshSearch();
   }
@@ -220,7 +242,11 @@ export default function App() {
     const data = await api(`/tickets/${ticketId}/follow-up`, "GET", token);
     setFollowUpItems((prev) => ({ ...prev, [ticketId]: data }));
     setFollowUpInput((prev) => ({ ...prev, [ticketId]: "" }));
-    updateTicket(ticketId, { status: "Follow up" });
+    try {
+      await updateTicket(ticketId, { status: "Follow up" });
+    } catch {
+      // Follow-up already saved; status update is best-effort.
+    }
   }
 
   async function loadFollowUp(ticketId) {
@@ -237,6 +263,7 @@ export default function App() {
   }
 
   function openTicketEditor(ticket) {
+    setReturnView(view);
     setActiveTicket(ticket);
     setTicketEditorForm({
       title: ticket.title,
@@ -244,9 +271,12 @@ export default function App() {
       priority: ticket.priority,
       status: ticket.status,
       roleGroup: ticket.role_group,
+      requesterEmployeeId: ticket.requester_employee_id ?? "",
+      requesterGroup: ticket.requester_group,
       appliedByEmployeeId: ticket.applied_by_employee_id ?? ""
     });
     loadFollowUp(ticket.id);
+    setView("ticketDetail");
   }
 
   async function saveTicketEditor(e) {
@@ -258,6 +288,8 @@ export default function App() {
       priority: ticketEditorForm.priority,
       status: ticketEditorForm.status,
       roleGroup: ticketEditorForm.roleGroup,
+      requesterEmployeeId: ticketEditorForm.requesterEmployeeId ? Number(ticketEditorForm.requesterEmployeeId) : null,
+      requesterGroup: ticketEditorForm.requesterGroup,
       appliedByEmployeeId: ticketEditorForm.appliedByEmployeeId ? Number(ticketEditorForm.appliedByEmployeeId) : null
     });
     setActiveTicket(updated);
@@ -375,6 +407,13 @@ export default function App() {
               <select value={ticketForm.priority} onChange={(e) => setTicketForm({ ...ticketForm, priority: e.target.value })}>{priorities.map((p) => <option key={p}>{p}</option>)}</select>
               <select value={ticketForm.status} onChange={(e) => setTicketForm({ ...ticketForm, status: e.target.value })}>{statuses.map((s) => <option key={s}>{s}</option>)}</select>
               <select value={ticketForm.roleGroup} onChange={(e) => setTicketForm({ ...ticketForm, roleGroup: e.target.value })}>{roles.map((r) => <option key={r}>{r}</option>)}</select>
+                  <select value={ticketForm.requesterGroup} onChange={(e) => setTicketForm({ ...ticketForm, requesterGroup: e.target.value })}>
+                    {roles.map((r) => <option key={r}>{r}</option>)}
+                  </select>
+                  <select value={ticketForm.requesterEmployeeId} onChange={(e) => setTicketForm({ ...ticketForm, requesterEmployeeId: e.target.value })}>
+                    <option value="">No requester</option>
+                    {employees.map((e) => <option key={e.id} value={e.id}>{e.username}</option>)}
+                  </select>
               {user.role === "Owner" ? (
                 <select value={ticketForm.appliedByEmployeeId} onChange={(e) => setTicketForm({ ...ticketForm, appliedByEmployeeId: e.target.value })}>
                   <option value="">No one</option>
@@ -403,6 +442,8 @@ export default function App() {
                   <select onChange={(e) => setFilters((f) => ({ ...f, priority: e.target.value }))}><option value="">Priority</option>{priorities.map((p) => <option key={p}>{p}</option>)}</select>
                   <input type="date" onChange={(e) => setFilters((f) => ({ ...f, updatedAt: e.target.value }))} />
                   <select onChange={(e) => setFilters((f) => ({ ...f, roleGroup: e.target.value }))}><option value="">Role Group</option>{roles.map((r) => <option key={r}>{r}</option>)}</select>
+                  <input placeholder="Requester" onChange={(e) => setFilters((f) => ({ ...f, requester: e.target.value }))} />
+                  <select onChange={(e) => setFilters((f) => ({ ...f, requesterGroup: e.target.value }))}><option value="">Requester Group</option>{roles.map((r) => <option key={r}>{r}</option>)}</select>
                   <input placeholder="Applied by" onChange={(e) => setFilters((f) => ({ ...f, appliedBy: e.target.value }))} />
                   <select onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}><option value="">Status</option>{statuses.map((s) => <option key={s}>{s}</option>)}</select>
                 </div>
@@ -432,62 +473,6 @@ export default function App() {
               hideFollowUp
               onTitleClick={openTicketEditor}
             />
-
-            {activeTicket && ticketEditorForm && (
-              <div className="ticket-editor">
-                <div className="section-head">
-                  <h4>Aba do Chamado #{activeTicket.id}</h4>
-                  <button onClick={() => setActiveTicket(null)}>Fechar</button>
-                </div>
-                <form className="form-grid" onSubmit={saveTicketEditor}>
-                  <input
-                    placeholder="Title"
-                    value={ticketEditorForm.title}
-                    onChange={(e) => setTicketEditorForm((f) => ({ ...f, title: e.target.value }))}
-                  />
-                  <input
-                    placeholder="Description"
-                    value={ticketEditorForm.description}
-                    onChange={(e) => setTicketEditorForm((f) => ({ ...f, description: e.target.value }))}
-                  />
-                  <select value={ticketEditorForm.priority} onChange={(e) => setTicketEditorForm((f) => ({ ...f, priority: e.target.value }))}>
-                    {priorities.map((p) => <option key={p}>{p}</option>)}
-                  </select>
-                  <select value={ticketEditorForm.status} onChange={(e) => setTicketEditorForm((f) => ({ ...f, status: e.target.value }))}>
-                    {statuses.map((s) => <option key={s}>{s}</option>)}
-                  </select>
-                  <select value={ticketEditorForm.roleGroup} onChange={(e) => setTicketEditorForm((f) => ({ ...f, roleGroup: e.target.value }))}>
-                    {roles.map((r) => <option key={r}>{r}</option>)}
-                  </select>
-                  <select
-                    value={ticketEditorForm.appliedByEmployeeId}
-                    onChange={(e) => setTicketEditorForm((f) => ({ ...f, appliedByEmployeeId: e.target.value }))}
-                  >
-                    <option value="">No one</option>
-                    {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.username}</option>)}
-                  </select>
-                  <button className="primary">Salvar alterações</button>
-                </form>
-
-                <h4>{t.followUp}</h4>
-                <div className="followup-list">
-                  {(followUpItems[activeTicket.id] || []).map((item) => (
-                    <div key={item.id} className="followup-item">
-                      <strong>{item.username}</strong> ({item.email} | {item.role})<br />
-                      {item.message}
-                    </div>
-                  ))}
-                </div>
-                <div className="followup-editor">
-                  <input
-                    placeholder="Mensagem de follow-up"
-                    value={followUpInput[activeTicket.id] || ""}
-                    onChange={(e) => setFollowUpInput((f) => ({ ...f, [activeTicket.id]: e.target.value }))}
-                  />
-                  <button className="primary" onClick={() => addFollowUp(activeTicket.id)}>Enviar</button>
-                </div>
-              </div>
-            )}
           </section>
         )}
 
@@ -506,6 +491,13 @@ export default function App() {
               <select value={ticketForm.priority} onChange={(e) => setTicketForm({ ...ticketForm, priority: e.target.value })}>{priorities.map((p) => <option key={p}>{p}</option>)}</select>
               <select value={ticketForm.status} onChange={(e) => setTicketForm({ ...ticketForm, status: e.target.value })}>{statuses.map((s) => <option key={s}>{s}</option>)}</select>
               <select value={ticketForm.roleGroup} onChange={(e) => setTicketForm({ ...ticketForm, roleGroup: e.target.value })}>{roles.map((r) => <option key={r}>{r}</option>)}</select>
+              <select value={ticketForm.requesterGroup} onChange={(e) => setTicketForm({ ...ticketForm, requesterGroup: e.target.value })}>
+                {roles.map((r) => <option key={r}>{r}</option>)}
+              </select>
+              <select value={ticketForm.requesterEmployeeId} onChange={(e) => setTicketForm({ ...ticketForm, requesterEmployeeId: e.target.value })}>
+                <option value="">No requester</option>
+                {employees.map((e) => <option key={e.id} value={e.id}>{e.username}</option>)}
+              </select>
               {user.role === "Owner" ? (
                 <select value={ticketForm.appliedByEmployeeId} onChange={(e) => setTicketForm({ ...ticketForm, appliedByEmployeeId: e.target.value })}>
                   <option value="">No one</option>
@@ -522,6 +514,119 @@ export default function App() {
 
             <h4>{t.homeQueue}</h4>
             <TicketTable data={myQueue} selectedIds={selectedIds} setSelectedIds={setSelectedIds} canSelect={user.role === "Owner"} onStatusChange={updateTicket} loadFollowUp={loadFollowUp} followUpItems={followUpItems} followUpInput={followUpInput} setFollowUpInput={setFollowUpInput} addFollowUp={addFollowUp} onTitleClick={openTicketEditor} />
+          </section>
+        )}
+
+        {view === "ticketDetail" && activeTicket && ticketEditorForm && (
+          <section className="card section-card">
+            <div className="section-head">
+              <h3>Edição do Chamado #{activeTicket.id}</h3>
+              <button onClick={() => setView(returnView)}>Voltar</button>
+            </div>
+            <p className="muted">Página dedicada para leitura completa, edição e acompanhamento técnico.</p>
+
+            <form className="detail-form" onSubmit={saveTicketEditor}>
+              <div className="field-block">
+                <label>Título</label>
+                <small>Nome curto para identificar o chamado.</small>
+                <input
+                  value={ticketEditorForm.title}
+                  onChange={(e) => setTicketEditorForm((f) => ({ ...f, title: e.target.value }))}
+                />
+              </div>
+
+              <div className="field-block field-block-full">
+                <label>Descrição</label>
+                <small>Descreva com detalhes o problema, contexto e ações esperadas.</small>
+                <textarea
+                  rows={8}
+                  value={ticketEditorForm.description}
+                  onChange={(e) => setTicketEditorForm((f) => ({ ...f, description: e.target.value }))}
+                />
+              </div>
+
+              <div className="field-block">
+                <label>Prioridade</label>
+                <small>Nível de urgência do chamado.</small>
+                <select value={ticketEditorForm.priority} onChange={(e) => setTicketEditorForm((f) => ({ ...f, priority: e.target.value }))}>
+                  {priorities.map((p) => <option key={p}>{p}</option>)}
+                </select>
+              </div>
+
+              <div className="field-block">
+                <label>Status</label>
+                <small>Estado atual de execução.</small>
+                <select value={ticketEditorForm.status} onChange={(e) => setTicketEditorForm((f) => ({ ...f, status: e.target.value }))}>
+                  {statuses.map((s) => <option key={s}>{s}</option>)}
+                </select>
+              </div>
+
+              <div className="field-block">
+                <label>Grupo de função</label>
+                <small>Área responsável principal.</small>
+                <select value={ticketEditorForm.roleGroup} onChange={(e) => setTicketEditorForm((f) => ({ ...f, roleGroup: e.target.value }))}>
+                  {roles.map((r) => <option key={r}>{r}</option>)}
+                </select>
+              </div>
+
+              <div className="field-block">
+                <label>Requester Group</label>
+                <small>Role/cargo do requerente.</small>
+                <select value={ticketEditorForm.requesterGroup} onChange={(e) => setTicketEditorForm((f) => ({ ...f, requesterGroup: e.target.value }))}>
+                  {roles.map((r) => <option key={r}>{r}</option>)}
+                </select>
+              </div>
+
+              <div className="field-block">
+                <label>Requester</label>
+                <small>Funcionário solicitante do chamado.</small>
+                <select
+                  value={ticketEditorForm.requesterEmployeeId}
+                  onChange={(e) => setTicketEditorForm((f) => ({ ...f, requesterEmployeeId: e.target.value }))}
+                >
+                  <option value="">No requester</option>
+                  {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.username}</option>)}
+                </select>
+              </div>
+
+              <div className="field-block">
+                <label>Aplicado para</label>
+                <small>Técnico responsável pelo chamado.</small>
+                {user.role === "Owner" ? (
+                  <select
+                    value={ticketEditorForm.appliedByEmployeeId}
+                    onChange={(e) => setTicketEditorForm((f) => ({ ...f, appliedByEmployeeId: e.target.value }))}
+                  >
+                    <option value="">No one</option>
+                    {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.username}</option>)}
+                  </select>
+                ) : (
+                  <input disabled value={activeTicket.applied_by_username || "Sem responsável"} />
+                )}
+              </div>
+
+              <div className="field-actions">
+                <button className="primary" type="submit">Salvar alterações</button>
+              </div>
+            </form>
+
+            <h4>{t.followUp}</h4>
+            <div className="followup-list">
+              {(followUpItems[activeTicket.id] || []).map((item) => (
+                <div key={item.id} className="followup-item">
+                  <strong>{item.username}</strong> ({item.email} | {item.role})<br />
+                  {item.message}
+                </div>
+              ))}
+            </div>
+            <div className="followup-editor">
+              <input
+                placeholder="Mensagem de follow-up"
+                value={followUpInput[activeTicket.id] || ""}
+                onChange={(e) => setFollowUpInput((f) => ({ ...f, [activeTicket.id]: e.target.value }))}
+              />
+              <button className="primary" onClick={() => addFollowUp(activeTicket.id)}>Enviar</button>
+            </div>
           </section>
         )}
       </main>
@@ -550,7 +655,7 @@ function TicketTable({
         <thead>
           <tr>
             {canSelect && <th>Sel</th>}
-            <th>ID</th><th>Title</th><th>Created</th><th>Priority</th><th>Updated</th><th>Role</th><th>Applied by</th><th>Status</th>{!hideFollowUp && <th>Follow-up</th>}
+            <th>ID</th><th>Title</th><th>Created</th><th>Priority</th><th>Updated</th><th>Role</th><th>Requester</th><th>Requester Group</th><th>Applied by</th><th>Status</th>{!hideFollowUp && <th>Follow-up</th>}
           </tr>
         </thead>
         <tbody>
@@ -575,6 +680,8 @@ function TicketTable({
               <td><Badge value={tk.priority} colorMap={priorityColor} /></td>
               <td>{new Date(tk.updated_at).toLocaleString()}</td>
               <td>{tk.role_group}</td>
+              <td>{tk.requester_username || "-"}</td>
+              <td>{tk.requester_group || "-"}</td>
               <td>{tk.applied_by_username || "-"}</td>
               <td>
                 {!readOnlyStatus ? (

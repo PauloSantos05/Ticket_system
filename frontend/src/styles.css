@@ -105,6 +105,14 @@ input, select, button {
   border: 1px solid #ccd8ea;
   background: #fff;
 }
+textarea {
+  width: 100%;
+  padding: 10px;
+  border-radius: 9px;
+  border: 1px solid #ccd8ea;
+  background: #fff;
+  resize: vertical;
+}
 button { cursor: pointer; background: #f6f9ff; }
 button:hover { background: #edf3ff; }
 button.primary { background: #315ca8; color: #fff; border-color: #315ca8; }
@@ -129,6 +137,33 @@ button.danger { background: #ffd7d7; border-color: #ffaaaa; color: #8b1f1f; }
   border-radius: 10px;
   padding: 12px;
   background: #f9fbff;
+}
+.detail-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.field-block {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.field-block label {
+  font-weight: 700;
+  color: #253a5c;
+}
+.field-block small {
+  color: #637694;
+  font-size: 12px;
+}
+.field-block-full {
+  grid-column: 1 / -1;
+}
+.field-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
 }
 .followup-editor {
   display: flex;
