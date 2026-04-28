@@ -487,4 +487,5 @@ function TicketTable({ data, selectedIds, setSelectedIds, canSelect, onStatusCha
         </tbody>
       </table>
     </div>
-  )
+  );
+}
