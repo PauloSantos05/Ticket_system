@@ -24,20 +24,21 @@ const statusColor = {
 
 const i18n = {
   pt: {
-    app: "ByteSolutions Ticket Management",
+    app: "Sistema de Gerenciamento de Chamados da ByteSolutions",
+    description: "Plataforma interna de chamados, filas e acompanhamento técnico.",
     login: "Entrar",
     email: "Email",
     password: "Senha",
-    ownerAdmin: "Admin (Owner)",
-    tickets: "Tickets",
+    ownerAdmin: "Admin (Proprietário)",
+    tickets: "Chamados",
     dashboard: "Dashboard",
     employees: "Funcionários",
     homeQueue: "Minha Fila",
     mainQueue: "Fila Principal",
     myDesk: "Minha Área",
-    createTicket: "Criar Ticket",
+    createTicket: "Criar Chamados",
     save: "Salvar",
-    followUp: "Follow-up",
+    followUp: "Acompanhamento",
     logout: "Sair",
     deleteSelected: "Deletar Selecionados",
     deleteAll: "Deletar Todos",
@@ -45,6 +46,7 @@ const i18n = {
   },
   en: {
     app: "ByteSolutions Ticket Management",
+    description: "Internal platform for managing tickets, queues, and technical follow-up.",
     login: "Login",
     email: "Email",
     password: "Password",
@@ -65,6 +67,7 @@ const i18n = {
   },
   es: {
     app: "Gestión de Tickets ByteSolutions",
+    description: "Plataforma interna para solicitudes de servicio, colas de espera y soporte técnico.",
     login: "Iniciar sesión",
     email: "Email",
     password: "Contraseña",
@@ -229,6 +232,9 @@ export default function App() {
     });
     refreshQueues();
     if (isSearchMode) refreshSearch();
+    if (view === "newTicket") {
+      setView(returnView);
+    }
   }
 
   async function updateTicket(id, payload) {
@@ -304,7 +310,7 @@ export default function App() {
         <div className="auth-panel">
           <p className="brand-kicker">ByteSolutions</p>
           <h1>{t.app}</h1>
-          <p className="muted">Plataforma interna de chamados, filas e acompanhamento técnico.</p>
+          <p className="muted">{t.description}</p>
           <div className="lang-row">
             <button className={lang === "pt" ? "active" : ""} onClick={() => setLang("pt")}>PT</button>
             <button className={lang === "en" ? "active" : ""} onClick={() => setLang("en")}>EN</button>
@@ -398,38 +404,14 @@ export default function App() {
         {view === "tickets" && (
           <section className="card section-card">
             <div className="section-head">
-              <h3>{t.createTicket}</h3>
+              <h3>{t.mainQueue}</h3>
               <div className="actions">
+                <button className="primary" onClick={() => { setReturnView("tickets"); setView("newTicket"); }}>{t.createTicket}</button>
                 <button onClick={() => setView("myDesk")}>{t.myDesk}</button>
                 <button title="Busca avançada" onClick={() => setIsSearchMode((s) => !s)}>🔎</button>
               </div>
             </div>
-            <form className="form-grid" onSubmit={onCreateTicket}>
-              <input placeholder="Title" value={ticketForm.title} onChange={(e) => setTicketForm({ ...ticketForm, title: e.target.value })} />
-              <input placeholder="Description" value={ticketForm.description} onChange={(e) => setTicketForm({ ...ticketForm, description: e.target.value })} />
-              <select value={ticketForm.priority} onChange={(e) => setTicketForm({ ...ticketForm, priority: e.target.value })}>{priorities.map((p) => <option key={p}>{p}</option>)}</select>
-              <select value={ticketForm.status} onChange={(e) => setTicketForm({ ...ticketForm, status: e.target.value })}>{statuses.map((s) => <option key={s}>{s}</option>)}</select>
-              <select value={ticketForm.roleGroup} onChange={(e) => setTicketForm({ ...ticketForm, roleGroup: e.target.value })}>{roles.map((r) => <option key={r}>{r}</option>)}</select>
-                  <select value={ticketForm.requesterGroup} onChange={(e) => setTicketForm({ ...ticketForm, requesterGroup: e.target.value })}>
-                    {roles.map((r) => <option key={r}>{r}</option>)}
-                  </select>
-                  <select value={ticketForm.requesterEmployeeId} onChange={(e) => setTicketForm({ ...ticketForm, requesterEmployeeId: e.target.value })}>
-                    <option value="">No requester</option>
-                    {employees.map((e) => <option key={e.id} value={e.id}>{e.username}</option>)}
-                  </select>
-              {user.role === "Owner" ? (
-                <select value={ticketForm.appliedByEmployeeId} onChange={(e) => setTicketForm({ ...ticketForm, appliedByEmployeeId: e.target.value })}>
-                  <option value="">No one</option>
-                  {employees.map((e) => <option key={e.id} value={e.id}>{e.username}</option>)}
-                </select>
-              ) : (
-                <label className="checkbox-row">
-                  <input type="checkbox" checked={ticketForm.assignToMe} onChange={(e) => setTicketForm({ ...ticketForm, assignToMe: e.target.checked })} />
-                  Atribuir para mim ao criar
-                </label>
-              )}
-              <button className="primary">{t.save}</button>
-            </form>
+            <p className="muted">Use o botão acima para abrir a página de criação de ticket.</p>
 
             {isSearchMode && (
               <>
@@ -483,40 +465,102 @@ export default function App() {
           <section className="card section-card">
             <div className="section-head">
               <h3>{t.myDesk}</h3>
-              <button onClick={() => setView("tickets")}>Voltar para {t.mainQueue}</button>
+              <div className="actions">
+                <button className="primary" onClick={() => { setReturnView("myDesk"); setView("newTicket"); }}>{t.createTicket}</button>
+                <button onClick={() => setView("tickets")}>Voltar para {t.mainQueue}</button>
+              </div>
             </div>
             <p className="muted">Aqui ficam apenas os chamados atribuídos para você.</p>
-
-            <h4>{t.createTicket}</h4>
-            <form className="form-grid" onSubmit={onCreateTicket}>
-              <input placeholder="Title" value={ticketForm.title} onChange={(e) => setTicketForm({ ...ticketForm, title: e.target.value })} />
-              <input placeholder="Description" value={ticketForm.description} onChange={(e) => setTicketForm({ ...ticketForm, description: e.target.value })} />
-              <select value={ticketForm.priority} onChange={(e) => setTicketForm({ ...ticketForm, priority: e.target.value })}>{priorities.map((p) => <option key={p}>{p}</option>)}</select>
-              <select value={ticketForm.status} onChange={(e) => setTicketForm({ ...ticketForm, status: e.target.value })}>{statuses.map((s) => <option key={s}>{s}</option>)}</select>
-              <select value={ticketForm.roleGroup} onChange={(e) => setTicketForm({ ...ticketForm, roleGroup: e.target.value })}>{roles.map((r) => <option key={r}>{r}</option>)}</select>
-              <select value={ticketForm.requesterGroup} onChange={(e) => setTicketForm({ ...ticketForm, requesterGroup: e.target.value })}>
-                {roles.map((r) => <option key={r}>{r}</option>)}
-              </select>
-              <select value={ticketForm.requesterEmployeeId} onChange={(e) => setTicketForm({ ...ticketForm, requesterEmployeeId: e.target.value })}>
-                <option value="">No requester</option>
-                {employees.map((e) => <option key={e.id} value={e.id}>{e.username}</option>)}
-              </select>
-              {user.role === "Owner" ? (
-                <select value={ticketForm.appliedByEmployeeId} onChange={(e) => setTicketForm({ ...ticketForm, appliedByEmployeeId: e.target.value })}>
-                  <option value="">No one</option>
-                  {employees.map((e) => <option key={e.id} value={e.id}>{e.username}</option>)}
-                </select>
-              ) : (
-                <label className="checkbox-row">
-                  <input type="checkbox" checked={ticketForm.assignToMe} onChange={(e) => setTicketForm({ ...ticketForm, assignToMe: e.target.checked })} />
-                  Atribuir para mim ao criar
-                </label>
-              )}
-              <button className="primary">{t.save}</button>
-            </form>
+            <p className="muted">Use o botão acima para abrir a página de criação de ticket.</p>
 
             <h4>{t.homeQueue}</h4>
             <TicketTable data={myQueue} selectedIds={selectedIds} setSelectedIds={setSelectedIds} canSelect={user.role === "Owner"} onStatusChange={updateTicket} loadFollowUp={loadFollowUp} followUpItems={followUpItems} followUpInput={followUpInput} setFollowUpInput={setFollowUpInput} addFollowUp={addFollowUp} onTitleClick={openTicketEditor} />
+          </section>
+        )}
+
+        {view === "newTicket" && (
+          <section className="card section-card">
+            <div className="section-head">
+              <h3>{t.createTicket}</h3>
+              <button onClick={() => setView(returnView)}>Voltar</button>
+            </div>
+            <p className="muted">Página dedicada para criar um novo ticket de forma mais organizada.</p>
+            <form className="detail-form" onSubmit={onCreateTicket}>
+              <div className="field-block">
+                <label>Título</label>
+                <input
+                  value={ticketForm.title}
+                  onChange={(e) => setTicketForm((f) => ({ ...f, title: e.target.value }))}
+                />
+              </div>
+
+              <div className="field-block field-block-full">
+                <label>Descrição</label>
+                <textarea
+                  rows={6}
+                  value={ticketForm.description}
+                  onChange={(e) => setTicketForm((f) => ({ ...f, description: e.target.value }))}
+                />
+              </div>
+
+              <div className="field-block">
+                <label>Prioridade</label>
+                <select value={ticketForm.priority} onChange={(e) => setTicketForm((f) => ({ ...f, priority: e.target.value }))}>
+                  {priorities.map((p) => <option key={p}>{p}</option>)}
+                </select>
+              </div>
+
+              <div className="field-block">
+                <label>Status</label>
+                <select value={ticketForm.status} onChange={(e) => setTicketForm((f) => ({ ...f, status: e.target.value }))}>
+                  {statuses.map((s) => <option key={s}>{s}</option>)}
+                </select>
+              </div>
+
+              <div className="field-block">
+                <label>Role Group</label>
+                <select value={ticketForm.roleGroup} onChange={(e) => setTicketForm((f) => ({ ...f, roleGroup: e.target.value }))}>
+                  {roles.map((r) => <option key={r}>{r}</option>)}
+                </select>
+              </div>
+
+              <div className="field-block">
+                <label>Requester Group</label>
+                <select value={ticketForm.requesterGroup} onChange={(e) => setTicketForm((f) => ({ ...f, requesterGroup: e.target.value }))}>
+                  {roles.map((r) => <option key={r}>{r}</option>)}
+                </select>
+              </div>
+
+              <div className="field-block">
+                <label>Requester</label>
+                <select value={ticketForm.requesterEmployeeId} onChange={(e) => setTicketForm((f) => ({ ...f, requesterEmployeeId: e.target.value }))}>
+                  <option value="">No requester</option>
+                  {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.username}</option>)}
+                </select>
+              </div>
+
+              <div className="field-block">
+                <label>Aplicado para</label>
+                {user.role === "Owner" ? (
+                  <select
+                    value={ticketForm.appliedByEmployeeId}
+                    onChange={(e) => setTicketForm((f) => ({ ...f, appliedByEmployeeId: e.target.value }))}
+                  >
+                    <option value="">No one</option>
+                    {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.username}</option>)}
+                  </select>
+                ) : (
+                  <label className="checkbox-row">
+                    <input type="checkbox" checked={ticketForm.assignToMe} onChange={(e) => setTicketForm((f) => ({ ...f, assignToMe: e.target.checked }))} />
+                    Atribuir para mim ao criar
+                  </label>
+                )}
+              </div>
+
+              <div className="field-actions">
+                <button className="primary" type="submit">{t.save}</button>
+              </div>
+            </form>
           </section>
         )}
 
