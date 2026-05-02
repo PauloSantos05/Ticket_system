@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 
-const API_URL = "http://localhost:4000/api";
+//Test Ngrok
+
+
+const API_URL = "/api";
 const roles = ["Technical Support", "Network", "HR", "System Analysis", "Administration"];
 const priorities = ["too High", "High", "Normal", "low", "too low"];
 const statuses = ["Opened", "Follow up", "Finished"];
