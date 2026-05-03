@@ -466,15 +466,14 @@ export default function App() {
             <div className="section-head">
               <h3>{t.myDesk}</h3>
               <div className="actions">
-                <button className="primary" onClick={() => { setReturnView("myDesk"); setView("newTicket"); }}>{t.createTicket}</button>
+                <button className="primary" onClick={() => { setReturnView("tickets"); setView("newTicket"); }}>{t.createTicket}</button>
                 <button onClick={() => setView("tickets")}>Voltar para {t.mainQueue}</button>
               </div>
             </div>
             <p className="muted">Aqui ficam apenas os chamados atribuídos para você.</p>
-            <p className="muted">Use o botão acima para abrir a página de criação de ticket.</p>
 
             <h4>{t.homeQueue}</h4>
-            <TicketTable data={myQueue} selectedIds={selectedIds} setSelectedIds={setSelectedIds} canSelect={user.role === "Owner"} onStatusChange={updateTicket} loadFollowUp={loadFollowUp} followUpItems={followUpItems} followUpInput={followUpInput} setFollowUpInput={setFollowUpInput} addFollowUp={addFollowUp} onTitleClick={openTicketEditor} />
+            <TicketTable data={myQueue} selectedIds={selectedIds} setSelectedIds={setSelectedIds} canSelect={user.role === "Owner"} readOnlyStatus loadFollowUp={loadFollowUp} followUpItems={followUpItems} followUpInput={followUpInput} setFollowUpInput={setFollowUpInput} addFollowUp={addFollowUp} hideFollowUp onTitleClick={openTicketEditor} />
           </section>
         )}
 
@@ -639,7 +638,7 @@ export default function App() {
               <div className="field-block">
                 <label>Aplicado para</label>
                 <small>Técnico responsável pelo chamado.</small>
-                {user.role === "Owner" ? (
+                {(
                   <select
                     value={ticketEditorForm.appliedByEmployeeId}
                     onChange={(e) => setTicketEditorForm((f) => ({ ...f, appliedByEmployeeId: e.target.value }))}
@@ -647,8 +646,6 @@ export default function App() {
                     <option value="">No one</option>
                     {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.username}</option>)}
                   </select>
-                ) : (
-                  <input disabled value={activeTicket.applied_by_username || "Sem responsável"} />
                 )}
               </div>
 
