@@ -42,7 +42,7 @@ const i18n = {
     logout: "Sair",
     deleteSelected: "Deletar Selecionados",
     deleteAll: "Deletar Todos",
-    confirmDelete: "Tem certeza que deseja deletar o(s) ticket(s)?"
+    confirmDelete: "Tem certeza que deseja deletar o(s) chamado(s)?"
   },
   en: {
     app: "ByteSolutions Ticket Management",
@@ -143,6 +143,8 @@ export default function App() {
     assignToMe: false
   });
 
+  const normalizeEmployeeId = (value) => (value ? Number(value) : null);
+
   async function fetchTickets(params = {}) {
     const query = new URLSearchParams(params).toString();
     const data = await api(`/tickets${query ? `?${query}` : ""}`, "GET", token);
@@ -210,10 +212,8 @@ export default function App() {
     e.preventDefault();
     const appliedByEmployeeId = ticketForm.assignToMe
       ? user.id
-      : ticketForm.appliedByEmployeeId
-        ? Number(ticketForm.appliedByEmployeeId)
-        : null;
-    const requesterEmployeeId = ticketForm.requesterEmployeeId ? Number(ticketForm.requesterEmployeeId) : null;
+      : normalizeEmployeeId(ticketForm.appliedByEmployeeId);
+    const requesterEmployeeId = normalizeEmployeeId(ticketForm.requesterEmployeeId);
     await api("/tickets", "POST", token, {
       ...ticketForm,
       requesterEmployeeId,
@@ -297,9 +297,9 @@ export default function App() {
       priority: ticketEditorForm.priority,
       status: ticketEditorForm.status,
       roleGroup: ticketEditorForm.roleGroup,
-      requesterEmployeeId: ticketEditorForm.requesterEmployeeId ? Number(ticketEditorForm.requesterEmployeeId) : null,
+      requesterEmployeeId: normalizeEmployeeId(ticketEditorForm.requesterEmployeeId),
       requesterGroup: ticketEditorForm.requesterGroup,
-      appliedByEmployeeId: ticketEditorForm.appliedByEmployeeId ? Number(ticketEditorForm.appliedByEmployeeId) : null
+      appliedByEmployeeId: normalizeEmployeeId(ticketEditorForm.appliedByEmployeeId)
     });
     setActiveTicket(updated);
   }

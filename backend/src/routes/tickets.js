@@ -6,6 +6,11 @@ const router = express.Router();
 
 router.use(requireAuth);
 
+const VALID_PRIORITIES = new Set(["too High", "High", "Normal", "low", "too low"]);
+const VALID_ROLE_GROUPS = new Set(["Technical Support", "Network", "HR", "System Analysis", "Administration"]);
+const VALID_REQUESTER_GROUPS = new Set(["Technical Support", "Network", "HR", "System Analysis", "Administration"]);
+const VALID_STATUSES = new Set(["Finished", "Opened", "Follow up"]);
+
 function canEditTicket(user, ticket) {
   if (user.role === "Owner") return true;
   return (
@@ -13,6 +18,25 @@ function canEditTicket(user, ticket) {
     ticket.requester_employee_id === user.id ||
     ticket.created_by_employee_id === user.id
   );
+}
+
+function validateTicketPayload({ title, description, priority, roleGroup, requesterGroup, status }) {
+  if (!title || !description || !priority || !roleGroup || !requesterGroup) {
+    return "Campos obrigatórios: title, description, priority, roleGroup, requesterGroup.";
+  }
+  if (!VALID_PRIORITIES.has(priority)) {
+    return `Priority inválida. Valores válidos: ${[...VALID_PRIORITIES].join(", ")}.`;
+  }
+  if (!VALID_ROLE_GROUPS.has(roleGroup)) {
+    return `Role group inválido. Valores válidos: ${[...VALID_ROLE_GROUPS].join(", ")}.`;
+  }
+  if (!VALID_REQUESTER_GROUPS.has(requesterGroup)) {
+    return `Requester group inválido. Valores válidos: ${[...VALID_REQUESTER_GROUPS].join(", ")}.`;
+  }
+  if (status && !VALID_STATUSES.has(status)) {
+    return `Status inválido. Valores válidos: ${[...VALID_STATUSES].join(", ")}.`;
+  }
+  return null;
 }
 
 router.get("/meta/requesters", async (_req, res) => {
@@ -128,8 +152,10 @@ router.post("/", async (req, res) => {
     status = "Opened",
     appliedByEmployeeId = null
   } = req.body;
-  if (!title || !description || !priority || !roleGroup || !requesterGroup) {
-    return res.status(400).json({ error: "Campos obrigatórios: title, description, priority, roleGroup, requesterGroup." });
+
+  const validationError = validateTicketPayload({ title, description, priority, roleGroup, requesterGroup, status });
+  if (validationError) {
+    return res.status(400).json({ error: validationError });
   }
 
   const result = await query(
@@ -152,20 +178,35 @@ router.put("/:id", async (req, res) => {
   }
 
   const { title, description, priority, roleGroup, requesterEmployeeId, requesterGroup, appliedByEmployeeId, status } = req.body;
+
+  const updatedPayload = {
+    title: title ?? ticket.title,
+    description: description ?? ticket.description,
+    priority: priority ?? ticket.priority,
+    roleGroup: roleGroup ?? ticket.role_group,
+    requesterGroup: requesterGroup ?? ticket.requester_group,
+    status: status ?? ticket.status
+  };
+
+  const validationError = validateTicketPayload(updatedPayload);
+  if (validationError) {
+    return res.status(400).json({ error: validationError });
+  }
+
   const result = await query(
     `UPDATE tickets
      SET title = $1, description = $2, priority = $3, role_group = $4, requester_employee_id = $5, requester_group = $6, applied_by_employee_id = $7, status = $8, updated_at = NOW()
      WHERE id = $9
      RETURNING *`,
     [
-      title ?? ticket.title,
-      description ?? ticket.description,
-      priority ?? ticket.priority,
-      roleGroup ?? ticket.role_group,
-      requesterEmployeeId ?? ticket.requester_employee_id,
-      requesterGroup ?? ticket.requester_group,
-      appliedByEmployeeId ?? ticket.applied_by_employee_id,
-      status ?? ticket.status,
+      updatedPayload.title,
+      updatedPayload.description,
+      updatedPayload.priority,
+      updatedPayload.roleGroup,
+      requesterEmployeeId === undefined ? ticket.requester_employee_id : requesterEmployeeId,
+      updatedPayload.requesterGroup,
+      appliedByEmployeeId === undefined ? ticket.applied_by_employee_id : appliedByEmployeeId,
+      updatedPayload.status,
       id
     ]
   );
