@@ -4,6 +4,16 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 5173
+    port: 5173,
+    host: true,
+    allowedHosts: [
+      "glass-extending-nearness.ngrok-free.dev"
+    ],
+    proxy: {
+      '/api': {
+        target: 'http://localhost:4000',
+        changeOrigin: true
+      }
+    }
   }
 });
